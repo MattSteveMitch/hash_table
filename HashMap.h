@@ -91,7 +91,7 @@ public:
         size = 0;
     }
 
-    string toString() {
+    string toString(bool verbose = false) {
         vector<string> nodes;
         vector<int> load_factors;
         stringstream ss;
@@ -99,8 +99,10 @@ public:
         int* loadFactor = new int(0);
         double total = 0;
         for (int i = 0; i < buckets.size(); i++) {
-            nodes.push_back('\n' + to_string(i) + ':');
-            *loadFactor = 0;
+            if (verbose) {
+                nodes.push_back('\n' + to_string(i) + ':');
+                *loadFactor = 0;
+            }
             addRestOfRowToString(buckets.at(i), nodes, loadFactor);
             load_factors.push_back(*loadFactor);
         }
@@ -116,7 +118,9 @@ public:
             ss << nodes.at(i);
             semicolon = true;
         }
-        ss << endl << "avg: " << total / this->size << endl;
+        if (verbose) {
+            ss << endl << "avg nodes per bucket: " << total / this->size << endl;
+        }
 
         return ss.str();
     }
@@ -284,13 +288,11 @@ private:
     }
 
     void resizeUp() {
-  //      cout << "resizing up" << endl;
         int newSize = 2 * buckets.size() + 1;
         resize(newSize);
     }
 
     void resizeDown() {
-    //    cout << "resizing down" << endl;
         int newSize = buckets.size() / 2 + 1;
         resize(newSize);
     }
