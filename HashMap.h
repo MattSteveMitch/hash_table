@@ -46,30 +46,19 @@ public:
 
 /** @brief Access the value slot associated with the given key, for either reading or writing. If the key does not yet exist in the hash map, a new value slot is created for it and filled beforehand with the default value for the specific value type.*/
     valType& operator[](keyType& key) {
-        if (keyIsString) {
-            keyType theKey = key;
-            return *getVal(theKey, true);
-        }
-
         return *getVal(key, true);
     }
 
-/** @brief Access the value slot associated with the given key, for either reading or writing. If the key does not yet exist in the hash map, a new value slot is created for it and filled beforehand with the default value for the specific value type.*/
+/** @brief Access the value slot associated with the given key (string literal), for either reading or writing. If the key does not yet exist in the hash map, a new value slot is created for it and filled beforehand with the default value for the specific value type.*/
     valType& operator[](const string& key) {
         string theKey = key;
         return *getVal(theKey, true);
     }
 
 /** @brief Get the value associated with the given key ONLY if it exists, otherwise throw an error */
-    valType get(keyType key) {
+    valType get(keyType& key) {
         Node<keyType, valType>* nodeOfInterest;
-        if (keyIsString) {
-            keyType theKey = key;
-            nodeOfInterest = getNode(theKey, false);
-        }
-        else {
-            nodeOfInterest = getNode(key, false);
-        }
+        nodeOfInterest = getNode(key, false);
 
         if (nodeOfInterest == NULL) {
             throw out_of_range("Key not found");
@@ -82,12 +71,13 @@ public:
         return size;
     }
 
-    bool containsKey(keyType key) {
-        if (keyIsString) {
-            keyType theKey = key;
-            return getNode(theKey, false) != NULL;
-        }
+    bool containsKey(keyType& key) {
         return getNode(key, false) != NULL;
+    }
+
+    bool containsKey(const string& key) {
+        string theKey = key;
+        return getNode(theKey, false) != NULL;
     }
 
     void clear() {
@@ -131,13 +121,13 @@ public:
         return ss.str();
     }
 
-    bool remove(keyType key) {
-        if (keyIsString) {
-            keyType theKey = key;
-            return removeHelperFun(theKey);
-        }
-
+    bool remove(keyType& key) {
         return removeHelperFun(key);
+    }
+
+    bool remove(const string& key) {
+        string theKey = key;
+        return removeHelperFun(theKey);
     }
 
 private:
