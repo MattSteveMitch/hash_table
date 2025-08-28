@@ -3,17 +3,17 @@
 
 #include <vector>
 #include <sstream>
-#include "HashNode.h"
 #include "Hashing.h"
+#include "HashNode.h"
 #include <exception>
+
+#define HashNode Node<keyType, valType>
 
 using namespace std;
 
 
-
-template<typename, typename> class HashMap;
-
-int mod(int x, int y) { // Since for some reason "%" is NOT the mod operator
+// Since for some reason `%` can return negatives
+unsigned long long mod(long long x, unsigned int y) {
     return ((x % y) + y) % y;
 }
 
@@ -22,150 +22,159 @@ template<typename keyType, typename valType>
 class HashMap {
 public:
     HashMap() {
-        buckets = {NULL, NULL};
+        buckets = new vector<HashNode*>(2);
         size = 0;
-        string s;
-        keyType k;
-        keyIsPrimitiveOrString = false;
+
+        const type_info& stringType = typeid(string);
         keyIsString = false;
-        keyIsPointer = false;
-        if (typeid(k).name() == typeid(s).name()) {
+        valIsString = false;
+        if (typeid(keyType) == stringType) {
             keyIsString = true;
         }
-        if (is_fundamental<keyType>::value || keyIsString) {
-            keyIsPrimitiveOrString = true;
-        }
-        if (is_pointer<keyType>::value) {
-            keyIsPointer = true;
+        
+        if (typeid(valType) == stringType) {
+            valIsString = true;
         }
     }
 
     ~HashMap() {
-        clear();
+        wipe();
     }
 
-/** @brief Access the value slot associated with the given key, for either reading or writing. If the key does not yet exist in the hash map, a new value slot is created for it and filled beforehand with the default value for the specific value type.*/
-    valType& operator[](keyType& key) {
-        return *getVal(key, true);
-    }
-
-/** @brief Access the value slot associated with the given key (string literal), for either reading or writing. If the key does not yet exist in the hash map, a new value slot is created for it and filled beforehand with the default value for the specific value type.*/
-    valType& operator[](const string& key) {
-        string theKey = key;
-        return *getVal(theKey, true);
-    }
-
-/** @brief Get the value associated with the given key ONLY if it exists, otherwise throw an error */
-    valType get(keyType& key) {
-        Node<keyType, valType>* nodeOfInterest;
+    /** @brief Get the value associated with the given key ONLY if it exists, otherwise throw an error */
+    valType& operator[](const keyType& key) {
+        HashNode* nodeOfInterest;
         nodeOfInterest = getNode(key, false);
 
         if (nodeOfInterest == NULL) {
             throw out_of_range("Key not found");
         }
 
-        return nodeOfInterest->data;
+        return *(nodeOfInterest->val);
     }
 
-    int getSize() {
+    /** 
+     * @brief Set a new value to the given key if it exists; if not, add the key and its value 
+     * @return true if key was already present and value was updated
+     * @return false if key and value were inserted 
+     */
+    bool insert(const keyType& key, const valType& val) {
+        HashNode* nodeOfInterest;
+        nodeOfInterest = getNode(key, true);
+        bool keyFound = (nodeOfInterest->val != NULL);
+
+        nodeOfInterest->val = new valType(val);
+
+        return keyFound;
+    }
+
+    unsigned int getSize() {
         return size;
     }
 
-    bool containsKey(keyType& key) {
+    bool containsKey(const keyType& key) {
         return getNode(key, false) != NULL;
     }
 
-    bool containsKey(const string& key) {
-        string theKey = key;
-        return getNode(theKey, false) != NULL;
-    }
-
     void clear() {
-        for (int i = 0; i < buckets.size(); i++) {
-            if (buckets.at(i) != NULL) {
-                buckets.at(i)->deleteWithSubsequent();
-                buckets.at(i) = NULL;
-            }
-        }
-        buckets.resize(2);
+        wipe();
+        buckets = new vector<HashNode*>(2);
         size = 0;
     }
 
+    /** Give summary of contents */
     string toString(bool verbose = false) {
-        vector<string> nodes;
-        vector<int> load_factors;
+        vector<string> lines;
+        vector<unsigned int> load_factors;
+
         stringstream ss;
-        bool semicolon = false;
-        int* loadFactor = new int(0);
-        double total = 0;
-        for (int i = 0; i < buckets.size(); i++) {
-            if (verbose) {
-                nodes.push_back('\n' + to_string(i) + ':');
-                *loadFactor = 0;
-            }
-            addRestOfRowToString(buckets.at(i), nodes, loadFactor);
-            load_factors.push_back(*loadFactor);
-        }
         
-        for (int l : load_factors) {
-            total += l * ((l + 1) * 0.5);
+        bool extraLine = false;
+        unsigned int loadFactor = 0;
+
+        for (unsigned int i = 0; i < buckets->size(); i++) {
+            if (verbose) {
+                lines.push_back(to_string(i) + ':');
+                loadFactor = 0;
+            }
+            loadFactor = addRestOfRowToString((*buckets)[i], lines, loadFactor);
+
+            if (verbose) {
+                load_factors.push_back(loadFactor);
+                lines.push_back("");
+            }
         }
 
-        for (int i = 0; i < nodes.size(); i++) {
-            if (semicolon) {
+        for (unsigned int i = 0; i < lines.size(); i++) {
+            if (extraLine) {
                 ss << endl;
             }
-            ss << nodes.at(i);
-            semicolon = true;
+            ss << lines.at(i);
+            extraLine = true;
         }
+
+        double total = 0;
         if (verbose) {
-            ss << endl << "avg nodes per bucket: " << total / this->size << endl;
+            for (unsigned int l : load_factors) {
+                total += l * ((l + 1) * 0.5);
+            }
+
+            ss << endl << "Avg. nodes to search through to find a value: ";
+            if (this->size) {
+                ss << total / this->size;
+            }
+            else {
+                ss << "N/A";
+            }
         }
 
         return ss.str();
     }
 
-    bool remove(keyType& key) {
+    /**
+     * @return true if key was found and removed,
+     * @return false if not
+     */
+    bool remove(const keyType& key) {
         return removeHelperFun(key);
     }
 
-    bool remove(const string& key) {
-        string theKey = key;
-        return removeHelperFun(theKey);
+    long long hashTheMap() const {
+        long long returnVal = 0;
+        for (unsigned int i = 0; i < buckets->size(); i++) {
+            if ((*buckets)[i] != NULL) {
+                returnVal += (*buckets)[i]->hashWithSubsequent();
+            }
+        }
+
+        return returnVal;
     }
 
 private:
 
-    valType* getVal(keyType& key, bool insert) {
-        auto node = getNode(key, insert);
-        if (node == NULL) {
-            return NULL;
-        }
-        return &(node->data);
-    }
-    
-    bool removeHelperFun(keyType& key) {
-        int hash = hashIt(key);
-        int numOfBuckets = buckets.size();
+    bool removeHelperFun(const keyType& key) {
+        long long hash = hashIt(key);
+        unsigned int numOfBuckets = buckets->size();
 
-        int bucketNum = mod(hash, numOfBuckets);
+        unsigned int bucketNum = mod(hash, numOfBuckets);
 
-        Node<keyType, valType>* next = buckets.at(bucketNum);
-        Node<keyType, valType>* last = NULL;
-        bool found;
+
+        // Search the bucket for the value
+
+        HashNode* next = (*buckets)[bucketNum];
+        HashNode* prev = NULL;
 
         while (next != NULL && next->getKey() != key) {
-            last = next;
+            prev = next;
             next = next->getNextNode();
         }
 
-        if (next != NULL) {
-          //  cout << "1 " << endl;
-            if (last == NULL) {
+        if (next != NULL) { // If we actually found the value
+            if (prev == NULL) { // If it's the first node in the linkedlist
                 removeFirstNode(bucketNum);
             }
             else {
-                removeNode(last);
+                removeNode(prev);
             }
             size--;
         }
@@ -173,7 +182,7 @@ private:
             return false;
         }
 
-        float loadFactor = (float)(size) / numOfBuckets;
+        double loadFactor = (double)(size) / numOfBuckets;
         if (loadFactor < 0.5) {
             resizeDown();
         }
@@ -181,65 +190,70 @@ private:
         return true;
     }
 
-    void removeNode(Node<keyType, valType>* prevNode) {
-        Node<keyType, valType>* nodeToRemove = prevNode->getNextNode();
+    /** Remove the node that comes after prevNode */
+    void removeNode(HashNode* prevNode) {
+        HashNode* nodeToRemove = prevNode->getNextNode();
         prevNode->setNext(nodeToRemove->getNextNode());
         delete nodeToRemove;
     }
 
-    void removeFirstNode(int bucketNum) {
-        Node<keyType, valType>* nodeToRemove = buckets.at(bucketNum);
-        buckets.at(bucketNum) = nodeToRemove->getNextNode();
+    /** Remove the first node in the given bucket */
+    void removeFirstNode(unsigned int bucketNum) {
+        HashNode* nodeToRemove = (*buckets)[bucketNum];
+        (*buckets)[bucketNum] = nodeToRemove->getNextNode();
         delete nodeToRemove;
     }
 
-    Node<keyType, valType>* getNode(keyType& key, bool insert) {
-        int hash;
-        int numOfBuckets = buckets.size();
+    /** @param insert Indicates whether we insert the key if not found in the map*/
+    HashNode* getNode(const keyType& key, bool insert) {
+        long long hash;
+        unsigned int numOfBuckets = buckets->size();
+        double loadFactor;
+        
+        if (insert) {
+            loadFactor = (double)(size + 1) / numOfBuckets;
+            if (loadFactor > 2) {
+                resizeUp();
+            }
 
-        float loadFactor = (float)(size + 1) / numOfBuckets;
-        if (loadFactor > 2) {
-            resizeUp();
+            numOfBuckets = buckets->size();
         }
-
-        numOfBuckets = buckets.size();
 
         hash = hashIt(key);
 
-        int bucketNum = mod(hash, numOfBuckets);
+        unsigned int bucketNum = mod(hash, numOfBuckets);
 
-        Node<keyType, valType>* next = buckets.at(bucketNum);
-        Node<keyType, valType>* last = NULL;
-        Node<keyType, valType>* nodeOfInterest;
+
+        // Search the bucket for the value
+
+        HashNode* next = (*buckets)[bucketNum];
+        HashNode* prev = NULL;
+        HashNode* nodeOfInterest;
 
         while (next != NULL && next->getKey() != key) {
-            last = next;
+            prev = next;
             next = next->getNextNode();
         }
 
-        if (next != NULL) {
-          //  cout << "1 " << endl;
+        if (next != NULL) { // If we actually found the node
             nodeOfInterest = next;
-        }
-        else if (last == NULL) {
-            //cout << "2 " << endl;
-            if (!insert) {
-                return NULL;
-            }
-            valType v = valType();
-            auto newNode = new Node(key, v);
-            buckets.at(bucketNum) = newNode;
-            size++;
-            nodeOfInterest = newNode;
         }
         else {
             if (!insert) {
                 return NULL;
             }
-            valType v = valType();
-            auto newNode = new Node(key, v);
-            //cout << "3 " << endl;
-            last->setNext(newNode);
+
+            HashNode* newNode = new Node(key, valTypeIndicator);
+            
+            if (prev == NULL) { // If we didn't find the value because the bucket is empty
+                (*buckets)[bucketNum] = newNode;
+            } 
+            /* If we didn't find the value, but the bucket is not empty, add the value
+            to the end of the linked list */
+            else {
+                prev->setNext(newNode);
+            }
+
             size++;
             nodeOfInterest = newNode;
         }
@@ -247,32 +261,38 @@ private:
         return nodeOfInterest;
     }
 
-    void moveNode(Node<keyType, valType>* node, vector<Node<keyType, valType>*>& newBuckets) {
-        int hash = hashIt(node->getKey());
+    /** Move a node into the new set of buckets */
+    void moveNode(HashNode* node, vector<HashNode*>* newBuckets) {
+        long long hash = hashIt(node->getKey());
 
-        int bucket = mod(hash, newBuckets.size());
+        unsigned int bucket = mod(hash, newBuckets->size());
 
-        Node<keyType, valType>* firstNode = newBuckets.at(bucket);
-        newBuckets.at(bucket) = new Node(node->getKeyAddress(), node->data, firstNode);
+        HashNode* firstNode = (*newBuckets)[bucket];
+        (*newBuckets)[bucket] = node;
+        node->setNext(firstNode);
     }
 
-    void addRestOfRow(Node<keyType, valType>* startNode, vector<Node<keyType, valType>*>& newBuckets) {
+    /** Add the current node and subsequent nodes in the current bucket's linked list, to the new
+    set of buckets */
+    void addRestOfRow(HashNode* startNode, vector<HashNode*>* newBuckets) {
         if (startNode == NULL) {
             return;
         }
+
+        HashNode* next = startNode->getNextNode();
         moveNode(startNode, newBuckets);
-
-        auto next = startNode->getNextNode();
         addRestOfRow(next, newBuckets);
-        delete startNode;
     }
 
-    void addRestOfRowToString(Node<keyType, valType>* startNode, vector<string>& nodes, int* numOfNodes) {
-        stringstream ss;
+    int addRestOfRowToString(HashNode* startNode, vector<string>& lines, unsigned int numOfNodes) {
         if (startNode == NULL) {
-            return;
+            return numOfNodes;
         }
-        *numOfNodes = *numOfNodes + 1;
+
+        stringstream ss;
+
+        numOfNodes++;
+
         ss << "key: ";
         if (keyIsString) {
             ss << '"' << startNode->getKey() << '"';
@@ -280,42 +300,70 @@ private:
         else {
             ss << startNode->getKey();
         }
-        ss << ", val: " << startNode->data;
-        auto next = startNode->getNextNode();
-        nodes.push_back(ss.str());
 
-        addRestOfRowToString(next, nodes, numOfNodes);
+        ss << ", val: ";
+        if (valIsString) {
+            ss << '"' << *(startNode->val) << '"';
+        }
+        else {
+            ss << *(startNode->val);
+        }
+
+        HashNode* next = startNode->getNextNode();
+        lines.push_back(ss.str());
+
+        numOfNodes = addRestOfRowToString(next, lines, numOfNodes);
+        return numOfNodes;
     }
 
     void resizeUp() {
-        int newSize = 2 * buckets.size() + 1;
+        unsigned int newSize = 2 * buckets->size() + 1;
         resize(newSize);
     }
 
     void resizeDown() {
-        int newSize = buckets.size() / 2 + 1;
+        unsigned int newSize = buckets->size() / 2 + 1;
+        if (newSize == buckets->size()) {
+            return;
+        }
         resize(newSize);
     }
 
-    void resize(int newSize) {
-        vector<Node<keyType, valType>*> newBuckets;
-        newBuckets.resize(newSize);
+    /** Increase or decrease the number of buckets and reorganize all nodes appropriately */
+    void resize(unsigned int newSize) {
+        vector<HashNode*>* newBuckets = new vector<HashNode*>(newSize);
 
-        for (int i = 0; i < buckets.size(); i++) {
-            addRestOfRow(buckets.at(i), newBuckets);
+        // Move all nodes into the new set of buckets
+        for (unsigned int i = 0; i < buckets->size(); i++) {
+            addRestOfRow((*buckets)[i], newBuckets);
         }
 
+        delete buckets;
         buckets = newBuckets;
     }
-    
-    int size;
-    bool keyIsPrimitiveOrString;
-    bool keyIsString;
-    bool keyIsPointer;
+
+    void wipe() {
+        for (unsigned int i = 0; i < buckets->size(); i++) {
+            if ((*buckets)[i] != NULL) {
+                (*buckets)[i]->deleteWithSubsequent();
+            }
+        }
+        delete buckets;
+        buckets = NULL;
+    }
 
 protected:
-    vector<Node<keyType, valType>*> buckets;
+    vector<HashNode*>* buckets;
+    const valType* valTypeIndicator = NULL;
+    unsigned int size;
+    bool keyIsString;
+    bool valIsString;
 };
 
+
+template<typename keyType, typename valType>
+long long hashIt(const HashMap<keyType, valType>& map) {
+    return map.hashTheMap();
+};
 
 #endif
