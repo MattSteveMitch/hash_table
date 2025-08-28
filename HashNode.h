@@ -1,92 +1,61 @@
 #ifndef HASHNODE_H
 #define HASHNODE_H
 
-#include <iostream>
+#include "Hashing.h"
 
-template<typename, typename> class Node;
-
+/** @brief Class representing a key-value pair in hash table. This hash table uses chaining for
+collision resolution, so they are called `Node` as in a linked list. */
 template<typename keyType, typename valType>
 class Node {
 
 public:
-	Node(keyType& key, valType& dataVal) {
+
+/** @param v is simply here to indicate what type the "values" (as opposed to keys) in the hash 
+table will be. Its specific value does not matter; it can be NULL. */
+	Node(const keyType& key, const valType* v) {
 		this->key = new keyType(key);
-    	data = dataVal;
+    	this->val = NULL;
 	    nextNode = NULL;
 	}
 
-	Node(keyType* key, valType& dataVal, Node<keyType, valType>* nextNode) {
-		this->key = key;
-		data = dataVal;
-		this->nextNode = nextNode;
-	}
-
-	Node() {
-		this->key = new keyType();
-    	data = valType();
-	    nextNode = NULL;
-	}
-
-	~Node() {} // Do not call without taking care of the children! No memory leaks!
-
-	/*
-	* Returns the data that is stored in this node
-	*
-	* @return the data that is stored in this node.
-	*/
-	valType& getData() {
-	    return data;
+	~Node() {
+		delete key;
+		delete val;
 	}
 
 	keyType& getKey() {
 		return *key;
 	}
 
-	keyType* getKeyAddress() {
-		return key;
-	}
-
-	keyType* getDataAddress() {
-		return &data;
-	}
-	/*
-	* Returns the left child of this node or null if it doesn't have one.
-	*
-	* @return the left child of this node or null if it doesn't have one.
-	*/
-	Node * getNextNode() {
+	Node* getNextNode() {
     	return nextNode;
 	}
-    
-    void setNext(keyType& key, valType data) {
-    	nextNode = new Node(key, data);
+
+    void setNext(Node* node) {
+    	nextNode = node;
 	}
 
-    void setNext(Node* child) { // Do not call without taking care of children! No memory leaks!
-    	nextNode = child;
-	}
-
+	/** Delete this node and subsequent nodes in linked list */
 	void deleteWithSubsequent() {
 		if (nextNode != NULL) {
 			nextNode->deleteWithSubsequent();
 		}
 		delete this;
 	}
-    
-    /*void removeRightChild() {
-	    delete right_child;
-    	right_child = NULL;
-	}*/
 
-    void setData(valType dataVal) {
-	    this->data = dataVal;
+	long long hashWithSubsequent() const {
+		long long returnVal = 0;
+
+		if (nextNode != NULL) {
+			returnVal += nextNode->hashWithSubsequent();
+		}
+		
+		returnVal += hashIt(*key) * (hashIt(*val) + 1726749251);
+
+		return returnVal;
 	}
 
-	void setKey(keyType& key) {
-		this->key = new keyType(key);
-	}
-
-    valType data;
+    valType* val;
 
 private:
 	keyType* key;
