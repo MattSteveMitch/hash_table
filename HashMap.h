@@ -43,8 +43,7 @@ public:
 
     /** @brief Get the value associated with the given key ONLY if it exists, otherwise throw an error */
     valType& operator[](const keyType& key) {
-        HashNode* nodeOfInterest;
-        nodeOfInterest = getNode(key, false);
+        HashNode* nodeOfInterest = getNode(key, false);
 
         if (nodeOfInterest == NULL) {
             throw out_of_range("Key not found");
@@ -59,8 +58,7 @@ public:
      * @return false if key and value were inserted 
      */
     bool insert(const keyType& key, const valType& val) {
-        HashNode* nodeOfInterest;
-        nodeOfInterest = getNode(key, true);
+        HashNode* nodeOfInterest = getNode(key, true);
         bool keyFound = (nodeOfInterest->val != NULL);
 
         nodeOfInterest->val = new valType(val);
